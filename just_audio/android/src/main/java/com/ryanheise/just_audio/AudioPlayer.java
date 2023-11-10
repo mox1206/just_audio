@@ -27,7 +27,10 @@ import com.google.android.exoplayer2.audio.AudioAttributes;
 import com.google.android.exoplayer2.extractor.DefaultExtractorsFactory;
 import com.google.android.exoplayer2.metadata.Metadata;
 import com.google.android.exoplayer2.metadata.MetadataOutput;
-import com.google.android.exoplayer2.metadata.icy.IcyHeaders;
+import com.google.android.exoplayer2.metadata.vorbis.VorbisComment;
+import com.google.android.exoplayer2.metadata.id3.TextInformationFrame;
+import com.google.android.exoplayer2.metadata.flac.PictureFrame;
+import com.google.android.exoplayer2.metadata.id3.ApicFrame;
 import com.google.android.exoplayer2.metadata.icy.IcyInfo;
 import com.google.android.exoplayer2.source.ClippingMediaSource;
 import com.google.android.exoplayer2.source.ConcatenatingMediaSource;
@@ -87,7 +90,7 @@ public class AudioPlayer implements MethodCallHandler, Player.Listener, Metadata
     private Result seekResult;
     private Map<String, MediaSource> mediaSources = new HashMap<String, MediaSource>();
     private IcyInfo icyInfo;
-    private IcyHeaders icyHeaders;
+    private Map<String, Object> icyHeaders = new HashMap<String, Object>();
     private int errorCount;
     private AudioAttributes pendingAudioAttributes;
     private LoadControl loadControl;
@@ -210,8 +213,10 @@ public class AudioPlayer implements MethodCallHandler, Player.Listener, Metadata
 
     @Override
     public void onMetadata(Metadata metadata) {
+        Log.i(TAG, "--onMetadata: " + metadata.toString());
         for (int i = 0; i < metadata.length(); i++) {
             final Metadata.Entry entry = metadata.get(i);
+            Log.i(TAG, "--onMetadata: " + entry.toString());
             if (entry instanceof IcyInfo) {
                 icyInfo = (IcyInfo) entry;
                 broadcastImmediatePlaybackEvent();
@@ -221,23 +226,48 @@ public class AudioPlayer implements MethodCallHandler, Player.Listener, Metadata
 
     @Override
     public void onTracksChanged(Tracks tracks) {
+        icyHeaders.clear();
+        icyHeaders.put("currentIndex", currentIndex);
         for (int i = 0; i < tracks.getGroups().size(); i++) {
             TrackGroup trackGroup = tracks.getGroups().get(i).getMediaTrackGroup();
-
             for (int j = 0; j < trackGroup.length; j++) {
                 Metadata metadata = trackGroup.getFormat(j).metadata;
-
-                if (metadata != null) {
-                    for (int k = 0; k < metadata.length(); k++) {
-                        final Metadata.Entry entry = metadata.get(k);
-                        if (entry instanceof IcyHeaders) {
-                            icyHeaders = (IcyHeaders) entry;
-                            broadcastImmediatePlaybackEvent();
-                        }
+                if (metadata == null) continue;
+                for (int k = 0; k < metadata.length(); k++) {
+                    final Metadata.Entry entry = metadata.get(k);
+                    Class<? extends Metadata.Entry> clazz = entry.getClass();
+                    Log.i(TAG, "--onTracksChanged5:" + clazz.getName());
+                    if(entry instanceof VorbisComment) {
+                        VorbisComment comment = (VorbisComment)entry;
+                        icyHeaders.put(comment.key, comment.value);
+                    } else if(entry instanceof TextInformationFrame) {
+                        TextInformationFrame comment = (TextInformationFrame)entry;
+                        icyHeaders.put(comment.id, comment.values);
+                    } else if(entry instanceof ApicFrame) {
+                        ApicFrame comment = (ApicFrame)entry;
+                        Map<String, Object> values = new HashMap<>();
+                        values.put("mimeType", comment.mimeType);
+                        values.put("pictureData", comment.pictureData);
+                        values.put("pictureType", comment.pictureType);
+                        icyHeaders.put(ApicFrame.ID, values);
+                    } else if(entry instanceof PictureFrame) {
+                        PictureFrame comment = (PictureFrame)entry;
+                        Map<String, Object> values = new HashMap<>();
+                        values.put("colors", comment.colors);
+                        values.put("depth", comment.depth);
+                        values.put("description", comment.description);
+                        values.put("height", comment.height);
+                        values.put("mimeType", comment.mimeType);
+                        values.put("pictureData", comment.pictureData);
+                        values.put("pictureType", comment.pictureType);
+                        values.put("width", comment.width);
+                        icyHeaders.put("pictureFrame", values);
                     }
                 }
             }
         }
+        //Log.i(TAG, "--onTracksChanged6:" + icyHeaders.toString());
+        broadcastImmediatePlaybackEvent();
     }
 
     private boolean updatePositionIfChanged() {
@@ -843,17 +873,13 @@ public class AudioPlayer implements MethodCallHandler, Player.Listener, Metadata
             info.put("url", icyInfo.url);
             icyData.put("info", info);
         }
-        if (icyHeaders != null) {
-            final Map<String, Object> headers = new HashMap<>();
-            headers.put("bitrate", icyHeaders.bitrate);
-            headers.put("genre", icyHeaders.genre);
-            headers.put("name", icyHeaders.name);
-            headers.put("metadataInterval", icyHeaders.metadataInterval);
-            headers.put("url", icyHeaders.url);
-            headers.put("isPublic", icyHeaders.isPublic);
-            icyData.put("headers", headers);
+        if(icyHeaders.containsKey("currentIndex")) {
+            Integer index = (Integer)icyHeaders.get("currentIndex");
+            if(currentIndex == index.intValue()) {
+                icyData.put("headers", icyHeaders);
+            }
         }
-        return icyData;
+        return icyData.size() == 0 ? null : icyData;
     }
 
     private long getCurrentPosition() {
@@ -898,6 +924,7 @@ public class AudioPlayer implements MethodCallHandler, Player.Listener, Metadata
     }
 
     public void play(Result result) {
+        icyHeaders.clear();
         if (player.getPlayWhenReady()) {
             result.success(new HashMap<String, Object>());
             return;

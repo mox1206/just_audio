@@ -1671,60 +1671,13 @@ class IcyInfo {
       other.url == url;
 }
 
-class IcyHeaders {
-  final int? bitrate;
-  final String? genre;
-  final String? name;
-  final int? metadataInterval;
-  final String? url;
-  final bool? isPublic;
-
-  static IcyHeaders _fromMessage(IcyHeadersMessage message) => IcyHeaders(
-        bitrate: message.bitrate,
-        genre: message.genre,
-        name: message.name,
-        metadataInterval: message.metadataInterval,
-        url: message.url,
-        isPublic: message.isPublic,
-      );
-
-  IcyHeaders({
-    required this.bitrate,
-    required this.genre,
-    required this.name,
-    required this.metadataInterval,
-    required this.url,
-    required this.isPublic,
-  });
-
-  @override
-  String toString() =>
-      'bitrate=$bitrate,genre=$genre,name=$name,metadataInterval=$metadataInterval,url=$url,isPublic=$isPublic';
-
-  @override
-  int get hashCode => toString().hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      other.runtimeType == runtimeType &&
-      other is IcyHeaders &&
-      other.bitrate == bitrate &&
-      other.genre == genre &&
-      other.name == name &&
-      other.metadataInterval == metadataInterval &&
-      other.url == url &&
-      other.isPublic == isPublic;
-}
-
 class IcyMetadata {
   final IcyInfo? info;
-  final IcyHeaders? headers;
+  final Map<dynamic, dynamic>? headers;
 
   static IcyMetadata _fromMessage(IcyMetadataMessage message) => IcyMetadata(
         info: message.info == null ? null : IcyInfo._fromMessage(message.info!),
-        headers: message.headers == null
-            ? null
-            : IcyHeaders._fromMessage(message.headers!),
+        headers: message.headers
       );
 
   IcyMetadata({required this.info, required this.headers});
@@ -2972,7 +2925,10 @@ class LockCachingAudioSource extends StreamAudioSource {
           cacheResponse.controller.close();
         }
       }
-      (await _partialCacheFile).renameSync(cacheFile.path);
+      var file = await _partialCacheFile;
+      if(await file.exists()) {
+        file.renameSync(cacheFile.path);
+      }
       await subscription.cancel();
       httpClient.close();
       _downloading = false;
