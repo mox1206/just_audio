@@ -319,7 +319,7 @@ enum ProcessingStateMessage {
 /// Icy metadata communicated from the platform implementation.
 class IcyMetadataMessage {
   final IcyInfoMessage? info;
-  final IcyHeadersMessage? headers;
+  final Map<dynamic, dynamic>? headers;
 
   IcyMetadataMessage({
     required this.info,
@@ -333,8 +333,7 @@ class IcyMetadataMessage {
             : IcyInfoMessage.fromMap(json['info'] as Map<dynamic, dynamic>),
         headers: json['headers'] == null
             ? null
-            : IcyHeadersMessage.fromMap(
-                json['headers'] as Map<dynamic, dynamic>),
+            : json['headers'] as Map<dynamic, dynamic>,
       );
 }
 
